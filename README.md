@@ -4,18 +4,20 @@
 
 [![Release](https://img.shields.io/github/release/noisymime/speeduino.svg)](https://github.com/noisymime/speeduino/releases/latest)
 [![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/noisymime/speeduino/blob/master/LICENSE)
-[![Build Status](https://img.shields.io/travis/noisymime/speeduino.svg)](https://travis-ci.org/noisymime/speeduino/)
-[![Open Bounties](https://img.shields.io/bountysource/team/speeduino/activity.svg)](https://www.bountysource.com/teams/speeduino)
-[![GitHub commits](https://img.shields.io/github/commits-since/noisymime/speeduino/202005.svg)](https://github.com/noisymime/speeduino/compare/202005...master)
-![MISRA](https://img.shields.io/azure-devops/tests/speeduino/Speeduino/1?label=MISRA&passed_label=warnings&failed_label=violations)
-[![Chat on Slack](https://img.shields.io/badge/slack-speeduino-CC2B5E.svg?style=flat&logo=slack)](https://speeduino.com/home/community/slack)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/noisymime/speeduino/build-firmware.yml?label=Build%20Status&branch=master)](https://github.com/noisymime/speeduino/actions/workflows/build-firmware.yml)
+[![Unit Tests](https://github.com/speeduino/speeduino/actions/workflows/sim-unit-tests.yml/badge.svg)](https://github.com/speeduino/speeduino/actions/workflows/sim-unit-tests.yml)
+[![Sponsors](https://img.shields.io/github/sponsors/noisymime)](https://github.com/sponsors/noisymime)
+[![GitHub commits](https://img.shields.io/github/commits-since/noisymime/speeduino/202310.svg)](https://github.com/noisymime/speeduino/compare/202310...master)
+[![https://img.shields.io/discord/879495735912071269 ](https://img.shields.io/discord/879495735912071269?label=Discord&logo=Discord)](https://discord.gg/YWCEexaNDe)
+[![codecov](https://codecov.io/github/speeduino/speeduino/graph/badge.svg?token=8LHRxqsbbo)](https://codecov.io/github/speeduino/speeduino)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=speeduino_speeduino&metric=bugs)](https://sonarcloud.io/summary/new_code?id=speeduino_speeduino)
 
 ##### A low cost, DIY friendly Engine Management System (ECU) based on the Arduino framework
 </div>
 
 
 ## Speeduino
-The Speeduino project is a flexible, fully featured Engine Management Systems (EMS aka ECU) based on the low cost and open source Arduino platform. It provides the hardware, firmware and software components that make up an engine management system, all provided under open licenses. With over 1000 installations, Speeduino has matured into a product that meets the needs of the hobbyist and enthusiast community without driving prices to the levels of traditional aftermarket ECUs
+The Speeduino project is a flexible, fully featured Engine Management Systems (EMS aka ECU) based on the low cost and open source Arduino platform. It provides the hardware, firmware and software components that make up an engine management system, all provided under open licenses. With over 1000 installations, Speeduino has matured into a product that meets the needs of the hobbyist and enthusiast community without driving prices to the levels of traditional aftermarket ECUs.
 
 ## Documentation
 The Speeduino online manual can be found at: https://wiki.speeduino.com
@@ -30,10 +32,10 @@ Of course, being open source, you are free to use the design files provided here
 ## Support
 In addition the manual referenced above, Speeduino has a large and very vibrant community of people to help out with your setup or any questions you might add. 
 
+* [Discord](https://discord.gg/YWCEexaNDe)
 * [Speeduino Forum](https://speeduino.com/forum) 
-* [Slack](https://speeduino.com/home/community/slack)
 * [Facebook](https://www.facebook.com/groups/191918764521976/)
 
 ## Contributors
 
-This project exists thanks to all the people who contribute, both in terms of code and testing provided. If you'd like to get involved, please have a read through [Contributing](contributing.md) and then jump on Slack to discuss things further
+This project exists thanks to all the people who contribute, both in terms of code and testing provided. If you'd like to get involved, please have a read through [Contributing](contributing.md) and then jump on Discord to discuss things further

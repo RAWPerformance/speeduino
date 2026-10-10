@@ -1,263 +1,273 @@
-/*
+/** @file
+Injector and Ignition (on/off) scheduling (structs).
+
 This scheduler is designed to maintain 2 schedules for use by the fuel and ignition systems.
-It functions by waiting for the overflow vectors from each of the timers in use to overflow, which triggers an interrupt
+It functions by waiting for the overflow vectors from each of the timers in use to overflow, which triggers an interrupt.
 
-/Technical
-Currently I am prescaling the 16-bit timers to 256 for injection and 64 for ignition. This means that the counter increments every 16us (injection) / 4uS (ignition) and will overflow every 1048576uS
-Max Period = (Prescale)*(1/Frequency)*(2^17)
-(See playground.arduino.cc/code/timer1)
-This means that the precision of the scheduler is 16uS (+/- 8uS of target) for fuel and 4uS (+/- 2uS) for ignition
+## Technical
 
-/Features
-This differs from most other schedulers in that its calls are non-recurring (IE You schedule an event at a certain time and once it has occurred, it will not reoccur unless you explicitely ask for it)
-Each timer can have only 1 callback associated with it at any given time. If you call the setCallback function a 2nd time, the original schedule will be overwritten and not occur
+Currently I am prescaling the 16-bit timers to 256 for injection and 64 for ignition.
+This means that the counter increments every 16us (injection) / 4uS (ignition) and will overflow every 1048576uS.
 
-Timer identification
-The Arduino timer3 is used for schedule 1
-The Arduino timer4 is used for schedule 2
-Both of these are 16-bit timers (ie count to 65536)
-See page 136 of the processors datasheet: www.atmel.com/Images/doc2549.pdf
+    Max Period = (Prescale)*(1/Frequency)*(2^17)
 
-256 prescale gives tick every 16uS
-256 prescale gives overflow every 1048576uS (This means maximum wait time is 1.0485 seconds)
+For more details see https://playground.arduino.cc/Code/Timer1/ (OLD: http://playground.arduino.cc/code/timer1 ).
+This means that the precision of the scheduler is:
+
+- 16uS (+/- 8uS of target) for fuel
+- 4uS (+/- 2uS) for ignition
+
+## Features
+
+This differs from most other schedulers in that its calls are non-recurring (ie when you schedule an event at a certain time and once it has occurred,
+it will not reoccur unless you explicitly ask/re-register for it).
+Each timer can have only 1 callback associated with it at any given time. If you call the setCallback function a 2nd time,
+the original schedule will be overwritten and not occur.
+
+## Timer identification
+
+Arduino timers usage for injection and ignition schedules:
+- timer3 is used for schedule 1(?) (fuel 1,2,3,4 ign 7,8)
+- timer4 is used for schedule 2(?) (fuel 5,6 ign 4,5,6)
+- timer5 is used ... (fuel 7,8, ign 1,2,3)
+
+Timers 3,4 and 5 are 16-bit timers (ie count to 65536).
+See page 136 of the processors datasheet: http://www.atmel.com/Images/doc2549.pdf .
+
+256 prescale gives tick every 16uS.
+256 prescale gives overflow every 1048576uS (This means maximum wait time is 1.0485 seconds).
 
 */
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
-#include "globals.h"
+#include "board_definition.h"
+#include "crankMaths.h"
+#include "preprocessor.h"
 
-#define USE_IGN_REFRESH
-#define IGNITION_REFRESH_THRESHOLD  30 //Time in uS that the refresh functions will check to ensure there is enough time before changing the end compare
+/** \enum ScheduleStatus
+ * @brief The current state of a schedule
+ * */
+enum ScheduleStatus {
+  // We use powers of 2 so we can check multiple states with a single bitwise AND
 
-extern void (*inj1StartFunction)();
-extern void (*inj1EndFunction)();
-extern void (*inj2StartFunction)();
-extern void (*inj2EndFunction)();
-extern void (*inj3StartFunction)();
-extern void (*inj3EndFunction)();
-extern void (*inj4StartFunction)();
-extern void (*inj4EndFunction)();
-extern void (*inj5StartFunction)();
-extern void (*inj5EndFunction)();
-extern void (*inj6StartFunction)();
-extern void (*inj6EndFunction)();
-extern void (*inj7StartFunction)();
-extern void (*inj7EndFunction)();
-extern void (*inj8StartFunction)();
-extern void (*inj8EndFunction)();
+  /** Not running */
+  OFF              = 0b00000000U, 
+  /** The delay phase of the schedule is active */
+  PENDING          = 0b00000001U,
+  /** The schedule action is running */
+  RUNNING          = 0b00000010U,
+  /** The schedule is running, with a next schedule queued up */
+  RUNNING_WITHNEXT = 0b00000100U,
+}; 
 
-/** @name IgnitionCallbacks
- * These are the function pointers that get called to begin and end the ignition coil charging. They are required for the various spark output modes
-*/
-///@{
-extern void (*ign1StartFunction)();
-extern void (*ign1EndFunction)();
-extern void (*ign2StartFunction)();
-extern void (*ign2EndFunction)();
-extern void (*ign3StartFunction)();
-extern void (*ign3EndFunction)();
-extern void (*ign4StartFunction)();
-extern void (*ign4EndFunction)();
-extern void (*ign5StartFunction)();
-extern void (*ign5EndFunction)();
-extern void (*ign6StartFunction)();
-extern void (*ign6EndFunction)();
-extern void (*ign7StartFunction)();
-extern void (*ign7EndFunction)();
-extern void (*ign8StartFunction)();
-extern void (*ign8EndFunction)();
-///@}
+/** @brief A scheduler callback that does nothing */
+void nullCallback(void);
 
-void initialiseSchedulers();
-void setFuelSchedule1(unsigned long timeout, unsigned long duration);
-void setFuelSchedule2(unsigned long timeout, unsigned long duration);
-void setFuelSchedule3(unsigned long timeout, unsigned long duration);
-void setFuelSchedule4(unsigned long timeout, unsigned long duration);
-//void setFuelSchedule5(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)()); //Schedule 5 remains a special case for now due to the way it's implemented 
-void setFuelSchedule5(unsigned long timeout, unsigned long duration);
-void setFuelSchedule6(unsigned long timeout, unsigned long duration);
-void setFuelSchedule7(unsigned long timeout, unsigned long duration);
-void setFuelSchedule8(unsigned long timeout, unsigned long duration);
-void setIgnitionSchedule1(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)());
-void setIgnitionSchedule2(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)());
-void setIgnitionSchedule3(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)());
-void setIgnitionSchedule4(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)());
-void setIgnitionSchedule5(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)());
-void setIgnitionSchedule6(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)());
-void setIgnitionSchedule7(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)());
-void setIgnitionSchedule8(void (*startCallback)(), unsigned long timeout, unsigned long duration, void(*endCallback)());
-
-inline void refreshIgnitionSchedule1(unsigned long timeToEnd) __attribute__((always_inline));
-
-//The ARM cores use seprate functions for their ISRs
-#if defined(CORE_STM32_OFFICIAL) || defined(CORE_STM32_GENERIC) || defined(CORE_TEENSY)
-  static inline void fuelSchedule1Interrupt();
-  static inline void fuelSchedule2Interrupt();
-  static inline void fuelSchedule3Interrupt();
-  static inline void fuelSchedule4Interrupt();
-#if (INJ_CHANNELS >= 5)
-  static inline void fuelSchedule5Interrupt();
-#endif
-#if (INJ_CHANNELS >= 6)
-  static inline void fuelSchedule6Interrupt();
-#endif
-#if (INJ_CHANNELS >= 7)
-  static inline void fuelSchedule7Interrupt();
-#endif
-#if (INJ_CHANNELS >= 8)
-  static inline void fuelSchedule8Interrupt();
-#endif
-#if (IGN_CHANNELS >= 1)
-  static inline void ignitionSchedule1Interrupt();
-#endif
-#if (IGN_CHANNELS >= 2)
-  static inline void ignitionSchedule2Interrupt();
-#endif
-#if (IGN_CHANNELS >= 3)
-  static inline void ignitionSchedule3Interrupt();
-#endif
-#if (IGN_CHANNELS >= 4)
-  static inline void ignitionSchedule4Interrupt();
-#endif
-#if (IGN_CHANNELS >= 5)
-  static inline void ignitionSchedule5Interrupt();
-#endif
-#if (IGN_CHANNELS >= 6)
-  static inline void ignitionSchedule6Interrupt();
-#endif
-#if (IGN_CHANNELS >= 7)
-  static inline void ignitionSchedule7Interrupt();
-#endif
-#if (IGN_CHANNELS >= 8)
-  static inline void ignitionSchedule8Interrupt();
-#endif
-#endif
-
-enum ScheduleStatus {OFF, PENDING, STAGED, RUNNING}; //The 3 statuses that a schedule can have
-
-struct Schedule {
-  volatile unsigned long duration;
-  volatile ScheduleStatus Status;
-  volatile byte schedulesSet; //A counter of how many times the schedule has been set
-  void (*StartCallback)(); //Start Callback function for schedule
-  void (*EndCallback)(); //Start Callback function for schedule
-  volatile unsigned long startTime; /**< The system time (in uS) that the schedule started, used by the overdwell protection in timers.ino */
-  volatile COMPARE_TYPE startCompare; //The counter value of the timer when this will start
-  volatile COMPARE_TYPE endCompare;
-
-  unsigned int nextStartCompare;
-  unsigned int nextEndCompare;
-  volatile bool hasNextSchedule = false;
-  volatile bool endScheduleSetByDecoder = false;
-};
-
-//Fuel schedules don't use the callback pointers, or the startTime/endScheduleSetByDecoder variables. They are removed in this struct to save RAM
-struct FuelSchedule {
-  volatile unsigned long duration;
-  volatile ScheduleStatus Status;
-  volatile byte schedulesSet; //A counter of how many times the schedule has been set
-  volatile COMPARE_TYPE startCompare; //The counter value of the timer when this will start
-  volatile COMPARE_TYPE endCompare;
-
-  unsigned int nextStartCompare;
-  unsigned int nextEndCompare;
-  volatile bool hasNextSchedule = false;
-};
-
-//volatile Schedule *timer3Aqueue[4];
-//Schedule *timer3Bqueue[4];
-//Schedule *timer3Cqueue[4];
-
-extern FuelSchedule fuelSchedule1;
-extern FuelSchedule fuelSchedule2;
-extern FuelSchedule fuelSchedule3;
-extern FuelSchedule fuelSchedule4;
-extern FuelSchedule fuelSchedule5;
-extern FuelSchedule fuelSchedule6;
-extern FuelSchedule fuelSchedule7;
-extern FuelSchedule fuelSchedule8;
-
-extern Schedule ignitionSchedule1;
-extern Schedule ignitionSchedule2;
-extern Schedule ignitionSchedule3;
-extern Schedule ignitionSchedule4;
-extern Schedule ignitionSchedule5;
-extern Schedule ignitionSchedule6;
-extern Schedule ignitionSchedule7;
-extern Schedule ignitionSchedule8;
-
-//IgnitionSchedule nullSchedule; //This is placed at the end of the queue. It's status will always be set to OFF and hence will never perform any action within an ISR
-
-static inline unsigned int setQueue(volatile Schedule *queue[], Schedule *schedule1, Schedule *schedule2, unsigned int CNT)
-{
-  //Create an array of all the upcoming targets, relative to the current count on the timer
-  unsigned int tmpQueue[4];
-
-  //Set the initial queue state. This order matches the tmpQueue order
-  if(schedule1->Status == OFF)
-  {
-    queue[0] = schedule2;
-    queue[1] = schedule2;
-    tmpQueue[0] = schedule2->startCompare - CNT;
-    tmpQueue[1] = schedule2->endCompare - CNT;
-  }
-  else
-  {
-    queue[0] = schedule1;
-    queue[1] = schedule1;
-    tmpQueue[0] = schedule1->startCompare - CNT;
-    tmpQueue[1] = schedule1->endCompare - CNT;
-  }
-
-  if(schedule2->Status == OFF)
-  {
-    queue[2] = schedule1;
-    queue[3] = schedule1;
-    tmpQueue[2] = schedule1->startCompare - CNT;
-    tmpQueue[3] = schedule1->endCompare - CNT;
-  }
-  else
-  {
-    queue[2] = schedule2;
-    queue[3] = schedule2;
-    tmpQueue[2] = schedule2->startCompare - CNT;
-    tmpQueue[3] = schedule2->endCompare - CNT;
-  }
-
-
-  //Sort the queues. Both queues are kept in sync.
-  //This implementes a sorting networking based on the Bose-Nelson sorting network
-  //See: pages.ripco.net/~jgamble/nw.html
-  #define SWAP(x,y) if(tmpQueue[y] < tmpQueue[x]) { unsigned int tmp = tmpQueue[x]; tmpQueue[x] = tmpQueue[y]; tmpQueue[y] = tmp; volatile Schedule *tmpS = queue[x]; queue[x] = queue[y]; queue[y] = tmpS; }
-  /*SWAP(0, 1); */ //Likely not needed
-  /*SWAP(2, 3); */ //Likely not needed
-  SWAP(0, 2);
-  SWAP(1, 3);
-  SWAP(1, 2);
-
-  //Return the next compare time in the queue
-  return tmpQueue[0] + CNT; //Return the
-}
-
-/*
- * Moves all the Schedules in a queue forward one position.
- * The current item (0) is discarded
- * The final queue slot is set to nullSchedule to indicate that no action should be taken
+/**
+ * @brief A schedule for a single output channel. 
+ * 
+ * @details
+ * @par A schedule consists of 3 independent parts:
+ * - an action that can be started and stopped. E.g. charge ignition coil or injection pulse
+ * - a delay until the action is started
+ * - a duration until the action is stopped
+ * 
+ * I.e.\n 
+ * \code 
+ *   <--------------- Delay ---------------><---- Duration ---->
+ *                                          ^                  ^
+ *                              Action starts                  Action ends
+ * \endcode
+ * 
+ * @par Timers are modelled as registers
+ * Once set, Schedule instances are usually driven externally by a timer
+ * ISR calling moveToNextState() periodically to update the schedule states.
  */
-static inline unsigned int popQueue(volatile Schedule *queue[])
-{
-  queue[0] = queue[1];
-  queue[1] = queue[2];
-  queue[2] = queue[3];
-  //queue[3] = &nullSchedule;
+struct Schedule {
+  // Deduce the real types of the counter and compare registers.
+  // COMPARE_TYPE is NOT the same - it's just an integer type wide enough to
+  // store 16-bit counter/compare calculation results.
+  /** @brief The type of a timer counter register (this varies between platforms) */
+  using counter_t = decltype(FUEL1_COUNTER /* <-- Arbitrary choice of macro, assumes all have the same type */);
+  /** @brief The type of a timer compare register (this varies between platforms) */
+  using compare_t = decltype(FUEL1_COMPARE /* <-- Arbitrary choice of macro, assumes all have the same type */);
 
-  unsigned int returnCompare;
-  if( queue[0]->Status == PENDING ) { returnCompare = queue[0]->startCompare; }
-  else { returnCompare = queue[0]->endCompare; }
+  /**
+   * @brief Construct a new Schedule object
+   * 
+   * @param counter A <b>reference</b> to the timer counter
+   * @param compare A <b>reference</b> to the timer comparator
+   */
+  constexpr Schedule(counter_t &counter, compare_t &compare)
+    : _counter(counter)
+    , _compare(compare) 
+  {
+  }
 
-  return returnCompare;
+  using callback = void(*)(void);
+ 
+  /**
+   * @brief Scheduled duration (timer ticks) 
+   *
+   * This captures the duration of the *next* interval to be scheduled. I.e.
+   *  * Status==PENDING: this is the duration that will be used when the schedule moves to the RUNNING state 
+   *  * Status==RUNNING_WITHNEXT: this is the duration that will be used after the current schedule finishes and the queued up scheduled starts 
+   */
+  volatile COMPARE_TYPE _duration = 0U;
+  volatile ScheduleStatus _status = OFF;  ///< Schedule status: OFF, PENDING, STAGED, RUNNING
+  callback _pStartCallback = &nullCallback; ///< Start Callback function for schedule
+  callback _pEndCallback = &nullCallback;   ///< End Callback function for schedule
+  COMPARE_TYPE _nextStartCompare = 0U;   ///< Planned start of next schedule (when current schedule is RUNNING)
+  
+  counter_t &_counter;       ///< **Reference** to the counter register. E.g. TCNT3
+  compare_t &_compare;       ///< **Reference**to the compare register. E.g. OCR3A
+
+protected:
+  virtual void reset(void);
+};
+
+/**
+ * @brief Is the schedule running?
+ * I.e. the action has started, but not finished. E.g. injector is open
+ */
+static inline bool isRunning(const Schedule &schedule) noexcept {
+  // Using flags and bitwise AND (&) to check multiple states is much quicker
+  // than a logical or (||) (one less branch & 30% less instructions)
+  static constexpr uint8_t flags = RUNNING | RUNNING_WITHNEXT;
+  return ((uint8_t)schedule._status & flags)!=0U;
 }
 
+/**
+ * @brief Set the schedule callbacks. I.e the functions called when the action
+ * needs to start & stop
+ * 
+ * @param schedule Schedule to modify
+ * @param pStartCallback The new start callback - called when the schedule switches to RUNNING status
+ * @param pEndCallback The new end callback - called when the schedule switches from RUNNING to OFF status
+ */
+void setCallbacks(Schedule &schedule, Schedule::callback pStartCallback, Schedule::callback pEndCallback) noexcept;
+
+/**
+ * @brief Set the schedule action to run for a certain duration in the future
+ * 
+ * @param schedule Schedule to modify
+ * @param delay Delay until the action starts (µS)
+ * @param duration Action duration (µS)
+ * @param allowQueuedSchedule true to allow a schedule to be queued up if one is currently running; false otherwise
+ */
+void setSchedule(Schedule &schedule, uint32_t delay, uint16_t duration, bool allowQueuedSchedule);
+
+/** @brief An ignition schedule.
+ *
+ * Goal is to fire the spark as close to the requested angle as possible.
+ * 
+ * \code 
+ *   <--------------- Delay ---------------><---- Charge Coil ---->
+ *                                                                ^
+ *                                                              Spark
+ * \endcode
+ * 
+ * Terminology: dwell is the period when the ignition system applies an electric
+ * current to the ignition coil's primary winding in order to charge up the coil
+ * so it can generate a spark. 
+ * 
+ * Note that dwell times use uint16_t & therefore maximum dwell is 65.535ms. 
+ * This limit is imposed elsewhere in Speeduino also.
+ */
+struct IgnitionSchedule : public Schedule {
+
+  using Schedule::Schedule;
+
+  volatile uint32_t _startTime = 0U;///< The system time (in uS) that the schedule started, used by the overdwell protection in timers.ino
+  int16_t chargeAngle = 0U;         ///< Angle the coil should begin charging.
+  int16_t dischargeAngle = 0U;      ///< Angle the coil should discharge at. I.e. spark.
+  uint16_t channelDegrees = 0U;     ///< The number of crank degrees until cylinder is at TDC  
+
+  void reset(void) override;
+};
+
+/**
+ * @brief Shared ignition schedule timer ISR *implementation*. Should be called by the actual ignition timer ISRs
+ * (as timed interrupts) when either the start time or the duration time are reached. See @ref schedule-state-machine
+ * 
+ * @param schedule The ignition schedule to move to the next state
+ */
+void moveToNextState(IgnitionSchedule &schedule) noexcept;
+
+/**
+ * @brief Adjust the crank angle used to originally set the schedule.
+ * 
+ * The assumption here is that we have a more accurate crank angle than
+ * was originally passed to calculateIgnitionTimeout. So we can increase the
+ * spark accuracy
+ * 
+ * @param current Current system status 
+ * @param schedule The schedule to modify 
+ * @param crankAngle The new crank angle in degrees
+ */
+void adjustCrankAngle(const statuses &current, IgnitionSchedule &schedule, int16_t crankAngle);
+
+/** @brief A fuel injection schedule.
+ *
+ * Goal is to open & close the injector as accurately as possible.
+ * 
+ * \code 
+ *   <--------------- Delay ---------------><---- Injecting ---->
+ *                                          ^                   ^
+ *                                        Open                Close
+ * \endcode
+ */
+struct FuelSchedule : public Schedule {
+
+  using Schedule::Schedule;
+
+  uint16_t channelDegrees = 0U;    ///< The number of crank degrees until cylinder is at TDC  
+  uint16_t pw = 0U;                ///< Pulse width in uS
+
+  void reset(void) override;
+};
+
+/**
+ * @brief Shared fuel schedule timer ISR implementation. Should be called by the actual timer ISRs
+ * (as timed interrupts) when either the start time or the duration time are reached. See @ref schedule-state-machine
+ * 
+ * @param schedule The fuel schedule to move to the next state
+ */
+void moveToNextState(FuelSchedule &schedule) noexcept;
+
+/// @cond
+static FORCE_INLINE uint32_t _calculateAngularTime(const Schedule &schedule, uint16_t eventAngle, uint16_t crankAngle, uint16_t maxAngle) {
+  int16_t delta = eventAngle - crankAngle;
+  if ( (isRunning(schedule)) || (schedule._status == OFF)) {
+    while(delta < 0) { delta += (int16_t)maxAngle; }
+  } 
+
+  return delta > 0 ? angleToTime((uint16_t)delta) : 0U;
+}
+
+static FORCE_INLINE uint16_t _adjustToTDC(int16_t angle, uint16_t angleOffset, uint16_t maxAngle) {
+  angle = angle - (int16_t)angleOffset;
+  if( angle < 0) { return angle + (int16_t)maxAngle; }
+  return angle;
+}
+
+static FORCE_INLINE uint32_t _calculateAngularTime(const Schedule &schedule, uint16_t angleOffset, uint16_t eventAngle, uint16_t crankAngle, uint16_t maxAngle) {
+  if (angleOffset==0U) { // Optimize for zero channel angle - no need to adjust start & crank angles
+    return _calculateAngularTime(schedule, eventAngle, crankAngle, maxAngle);
+  }
+  // Realign the current crank angle and the desired start angle around 0 degrees for the given cylinder/output
+  // Eg: If cylinder 2 TDC is 180 degrees after cylinder 1 (E.g. a standard 4 cylinder engine), then
+  // adjusted crank angle is 180* less than the current crank angle and adjusted start angle is the desired open angle less 180*. 
+  // Thus the cylinder is being treated relative to its own TDC, regardless of its offset
+  //
+  // This is done to avoid very small or very large deltas between crank angle and start angle.
+  return _calculateAngularTime(schedule, 
+            _adjustToTDC(eventAngle, angleOffset, maxAngle),
+            _adjustToTDC(crankAngle, angleOffset, maxAngle),
+            maxAngle);
+}
+
+/// @endcond
 
 #endif // SCHEDULER_H
